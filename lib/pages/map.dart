@@ -1,3 +1,4 @@
+import 'dart:ffi';
 import 'dart:io';
 import 'package:amap_flutter_base/amap_flutter_base.dart';
 import 'package:amap_flutter_location/amap_flutter_location.dart';
@@ -19,15 +20,20 @@ class Mappage extends StatefulWidget {
 }
 
 class _MappageState extends State<Mappage> {
+  int firstAddcnt = 0; //判断是否是删除过第一个没有意义的polygon
   AMapController? mapController;
   AMapFlutterLocation? location;
   PermissionStatus? permissionStatus;
   CameraPosition? currentlocation;
+  bool CanAddPolygons = false;
 
   late MapType _mapType;
   List poisData = [];
   var markerLatitude;
   var markerLongitude;
+  //需要先设置一个空的map赋值给AMapWidget的markers，否则后续无法添加marker
+  Map<String, Marker> _markers = <String, Marker>{};
+  Map<String, Polygon> _polygons = {};
 
   double? meLatitude;
   double? meLongitude;
@@ -46,6 +52,7 @@ class _MappageState extends State<Mappage> {
 
     /// 设置Android和iOS的apikey，
     AMapFlutterLocation.setApiKey(Constconfig.androidkey, Constconfig.ioskey);
+    _addpolygons();
   }
 
   Future<void> requestPermission() async {
@@ -73,7 +80,7 @@ class _MappageState extends State<Mappage> {
     location = AMapFlutterLocation()
       ..setLocationOption(AMapLocationOption())
       ..onLocationChanged().listen((event) {
-        print(event);
+        // print(event);
         double? latitude = double.tryParse(event['latitude'].toString());
         double? longitude = double.tryParse(event['longitude'].toString());
         markerLatitude = latitude.toString();
@@ -84,7 +91,7 @@ class _MappageState extends State<Mappage> {
           setState(() {
             currentlocation = CameraPosition(
               target: LatLng(latitude, longitude),
-              zoom: 10,
+              zoom: 18,
             );
           });
         }
@@ -92,49 +99,88 @@ class _MappageState extends State<Mappage> {
       ..startLocation();
   }
 
-  void _onMapPoiTouched(AMapPoi poi) async {
-    if (null == poi) {
-      return;
-    }
-    print('_onMapPoiTouched===> ${poi.toJson()}');
-    var xx = poi.toJson();
-    print(xx['latLng']);
-    markerLatitude = xx['latLng'][1];
-    markerLongitude = xx['latLng'][0];
-    print(markerLatitude);
-    print(markerLatitude);
-    setState(() {
-      _addMarker(poi.latLng!);
-    });
-    _getPoisData();
+  // void _onMapPoiTouched(AMapPoi poi) async {
+  //   if (null == poi) {
+  //     return;
+  //   }
+  //   print('_onMapPoiTouched===> ${poi.toJson()}');
+  //   var xx = poi.toJson();
+  //   print(xx['latLng']);
+  //   markerLatitude = xx['latLng'][1];
+  //   markerLongitude = xx['latLng'][0];
+  //   print(markerLatitude);
+  //   print(markerLatitude);
+  //   setState(() {
+  //     _addMarker(poi.latLng!);
+  //   });
+  //   _getPoisData();
+  // }
+
+  void _addpolygons() {
+    final Polygon polygon = Polygon(
+        points: <LatLng>[
+          LatLng(38.885, 115.514),
+        ],
+        strokeColor: Colors.blue.withOpacity(0.8),
+        fillColor: Colors.blue.withOpacity(0.2),
+        strokeWidth: 2);
+    //创建和polygon并列的marker
+    final Marker marker = Marker(
+        position: polygon.points[0],
+        alpha: 0.0); //实际上这个点是看不到的，因为alpha是透明度，0就是看不见
+
+    _polygons["id"] = polygon;
+    _markers["id"] = marker;
   }
 
-  //需要先设置一个空的map赋值给AMapWidget的markers，否则后续无法添加marker
-  final Map<String, Marker> _markers = <String, Marker>{};
-  //添加一个marker
-  void _addMarker(LatLng markPostion) async {
-    _removeAll();
-    final Marker marker = Marker(
-      position: markPostion,
-      //使用默认hue的方式设置Marker的图标
-      icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueOrange),
-    );
-    //调用setState触发AMapWidget的更新，从而完成marker的添加
+  void addPoint(LatLng latlnt) {
+    final Polygon? polygon = _polygons["id"];
+    List<LatLng> currentPoints = polygon!.points;
+    List<LatLng> newPoints = <LatLng>[];
+    newPoints.addAll(currentPoints);
+    if (firstAddcnt == 0) {
+      newPoints.remove(newPoints[0]);
+      _markers.clear();
+      firstAddcnt++;
+    }
+    newPoints.add(latlnt);
+    // print(newPoints);
     setState(() {
-      //将新的marker添加到map里
-      _markers[marker.id] = marker;
+      _polygons["id"] = polygon.copyWith(
+        pointsParam: newPoints,
+      );
     });
-    _changeCameraPosition(markPostion);
   }
+
+  void addMarker(LatLng latlnt) {
+    final Marker? marker = Marker(position: latlnt);
+    _markers[marker!.id] = marker;
+  }
+
+  // //添加一个marker
+  // void _addMarker(LatLng markPostion) async {
+  //   _removeAll();
+  //   final Marker marker = Marker(
+  //     position: markPostion,
+  //     //使用默认hue的方式设置Marker的图标
+  //     icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueOrange),
+  //   );
+  //   //调用setState触发AMapWidget的更新，从而完成marker的添加
+  //   setState(() {
+  //     //将新的marker添加到map里
+  //     _markers[marker.id] = marker;
+  //   });
+  //   _changeCameraPosition(markPostion);
+  // }
 
   /// 清除marker
-  void _removeAll() {
-    if (_markers.isNotEmpty) {
-      setState(() {
-        _markers.clear();
-      });
-    }
-  }
+  // void _removeAll() {
+  //   if (_markers.isNotEmpty) {
+  //     setState(() {
+  //       _markers.clear();
+  //     });
+  //   }
+  // }
 
   /// 改变中心点
   void _changeCameraPosition(LatLng markPostion, {double zoom = 13}) {
@@ -187,14 +233,23 @@ class _MappageState extends State<Mappage> {
                       initialCameraPosition: currentlocation!,
                       //定位小蓝点
                       myLocationStyleOptions: MyLocationStyleOptions(
-                        true,
+                        false,
                       ),
                       // 普通地图normal,卫星地图satellite,夜间视图night,导航视图 navi,公交视图bus,
                       mapType: _mapType,
                       // 缩放级别范围
                       minMaxZoomPreference: const MinMaxZoomPreference(3, 20),
-                      onPoiTouched: _onMapPoiTouched,
+                      // onPoiTouched: _onMapPoiTouched,
+                      onTap: (LatLng latlng) {
+                        if (CanAddPolygons) {
+                          addPoint(latlng);
+                          addMarker(latlng); //多边形的point
+                          print('object');
+                        }
+                      },
+
                       markers: Set<Marker>.of(_markers.values),
+                      polygons: Set<Polygon>.of(_polygons.values),
                       // 地图创建成功时返回AMapController
                       onMapCreated: (AMapController controller) {
                         mapController = controller;
@@ -202,23 +257,48 @@ class _MappageState extends State<Mappage> {
                     ),
                   ),
                 ),
+                // Expanded(//显示建筑物信息
+                //   child: ListView(
+                //     children: [
+                //       Container(
+                //         padding: EdgeInsets.all(16),
+                //         child: const Text(
+                //           '周边信息',
+                //           style: TextStyle(
+                //             fontSize: 16,
+                //             fontWeight: FontWeight.bold,
+                //           ),
+                //         ),
+                //       ),
+                //       _buildPoisList(),
+                //       ElevatedButton(
+                //         onPressed: _getPoisData,
+                //         child: Text('获取周边数据'),
+                //       ),
+                //     ],
+                //   ),
+                // ),
                 Expanded(
                   child: ListView(
                     children: [
                       Container(
                         padding: EdgeInsets.all(16),
                         child: const Text(
-                          '周边信息',
+                          '对建筑物描点',
                           style: TextStyle(
                             fontSize: 16,
                             fontWeight: FontWeight.bold,
                           ),
                         ),
                       ),
-                      _buildPoisList(),
                       ElevatedButton(
-                        onPressed: _getPoisData,
-                        child: Text('获取周边数据'),
+                        onPressed: () {
+                          setState(() {
+                            CanAddPolygons = true;
+                            print(_polygons["id"]?.points);
+                          });
+                        },
+                        child: Text('开始描点'),
                       ),
                     ],
                   ),
@@ -295,73 +375,73 @@ class _MappageState extends State<Mappage> {
     );
   }
 
-  Widget _buildPoisList() {
-    return Column(
-      children: poisData.map((value) {
-        return ListTile(
-          title: Text(value['name']),
-          subtitle: Text(
-              '${value['pname']}${value['cityname']}${value['adname']}${value['address']}'),
-          onTap: () async {
-            List locationData = value['location'].split(',');
-            double l1 = double.parse(locationData[1]);
-            double l2 = double.parse(locationData[0]);
-            markerLatitude = l2;
-            markerLongitude = l1;
-            _getPoisData();
-            _addMarker(LatLng(l1, l2));
-            _changeCameraPosition(LatLng(l1, l2));
-          },
-          onLongPress: () {
-            showCupertinoDialog(
-                context: context,
-                builder: (context) {
-                  return CupertinoAlertDialog(
-                    title: const Text('提示'),
-                    content: const Text('是否进入高德地图导航'),
-                    actions: <Widget>[
-                      CupertinoDialogAction(
-                        child: const Text('取消'),
-                        onPressed: () {
-                          Navigator.pop(context);
-                        },
-                      ),
-                      CupertinoDialogAction(
-                        child: Text('确认'),
-                        onPressed: () async {
-                          String title = value['name'];
-                          var locationData = value['location'].split(',');
-                          double l1 = double.parse(locationData[1]);
-                          double l2 = double.parse(locationData[0]);
+  // Widget _buildPoisList() {
+  //   return Column(
+  //     children: poisData.map((value) {
+  //       return ListTile(
+  //         title: Text(value['name']),
+  //         subtitle: Text(
+  //             '${value['pname']}${value['cityname']}${value['adname']}${value['address']}'),
+  //         onTap: () async {
+  //           List locationData = value['location'].split(',');
+  //           double l1 = double.parse(locationData[1]);
+  //           double l2 = double.parse(locationData[0]);
+  //           markerLatitude = l2;
+  //           markerLongitude = l1;
+  //           _getPoisData();
+  //           _addMarker(LatLng(l1, l2));
+  //           _changeCameraPosition(LatLng(l1, l2));
+  //         },
+  //         onLongPress: () {
+  //           showCupertinoDialog(
+  //               context: context,
+  //               builder: (context) {
+  //                 return CupertinoAlertDialog(
+  //                   title: const Text('提示'),
+  //                   content: const Text('是否进入高德地图导航'),
+  //                   actions: <Widget>[
+  //                     CupertinoDialogAction(
+  //                       child: const Text('取消'),
+  //                       onPressed: () {
+  //                         Navigator.pop(context);
+  //                       },
+  //                     ),
+  //                     CupertinoDialogAction(
+  //                       child: Text('确认'),
+  //                       onPressed: () async {
+  //                         String title = value['name'];
+  //                         var locationData = value['location'].split(',');
+  //                         double l1 = double.parse(locationData[1]);
+  //                         double l2 = double.parse(locationData[0]);
 
-                          Uri uri = Uri.parse(
-                              '${Platform.isAndroid ? 'android' : 'ios'}amap://path?sourceApplication=applicationName&sid=&slat=$meLatitude&slon=$meLongitude&sname=&did=&dlat=$l1&dlon=$l2&dname=$title&dev=0&t=0');
+  //                         Uri uri = Uri.parse(
+  //                             '${Platform.isAndroid ? 'android' : 'ios'}amap://path?sourceApplication=applicationName&sid=&slat=$meLatitude&slon=$meLongitude&sname=&did=&dlat=$l1&dlon=$l2&dname=$title&dev=0&t=0');
 
-                          try {
-                            if (await canLaunchUrl(uri)) {
-                              await launchUrl(uri);
-                            } else {
-                              print('无法调起高德地图');
-                            }
-                          } catch (e) {
-                            print('无法调起高德地图');
-                          }
-                          Navigator.pop(context);
-                        },
-                      ),
-                    ],
-                  );
-                });
-          },
-        );
-      }).toList(),
-    );
-  }
+  //                         try {
+  //                           if (await canLaunchUrl(uri)) {
+  //                             await launchUrl(uri);
+  //                           } else {
+  //                             print('无法调起高德地图');
+  //                           }
+  //                         } catch (e) {
+  //                           print('无法调起高德地图');
+  //                         }
+  //                         Navigator.pop(context);
+  //                       },
+  //                     ),
+  //                   ],
+  //                 );
+  //               });
+  //         },
+  //       );
+  //     }).toList(),
+  //   );
+  // }
 
   /// 获取周边数据
   Future<void> _getPoisData() async {
     var response = await Dio().get(
-        'https://restapi.amap.com/v3/place/around?key=${Constconfig.webkey}&location=$markerLatitude,$markerLongitude&keywords=&types=&radius=1000&offset=20&page=1&extensions=base');
+        'http://restapi.amap.com/v3/place/around?key=${Constconfig.webkey}&location=$markerLatitude,$markerLongitude&keywords=&types=&radius=1000&offset=20&page=1&extensions=base');
     setState(() {
       poisData = response.data['pois'];
     });
